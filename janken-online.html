@@ -235,6 +235,30 @@
   .waiting-note { font-size: 0.9em; color: var(--muted); text-align: center; min-height: 1.2em; }
   .turn-display { font-size: 0.75em; color: var(--muted); }
 
+  .game-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 60px;
+  }
+  .game-header h1 { flex: 1; margin: 4px 0; }
+  .quit-btn {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    background: rgba(90, 42, 42, 0.8);
+    color: #ffb0b2;
+    border: 1px solid var(--danger);
+    padding: 5px 10px;
+    font-size: 0.78em;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .quit-btn:hover { background: rgba(140, 50, 50, 0.9); }
+
   @media (max-width: 520px) {
     .card, .slot-empty, .card-back { width: 88px; height: 130px; }
     .card .hand { font-size: 2em; }
@@ -264,6 +288,9 @@
       <div id="titleError" class="error"></div>
     </div>
     <p class="small-link"><a href="index.html">CPU 対戦版はこちら →</a></p>
+    <p id="sessionResetWrap" class="small-link" style="display:none;">
+      <a href="#" id="sessionResetLink">⚠ 前回のセッションをリセット</a>
+    </p>
   </div>
 
   <!-- WAITING SCREEN -->
@@ -282,7 +309,10 @@
 
   <!-- GAME SCREEN -->
   <div id="gameScreen" class="screen">
-    <h1>⚔ オンライン対戦 ⚔ <span id="turnDisplay" class="turn-display"></span></h1>
+    <div class="game-header">
+      <h1>⚔ オンライン対戦 ⚔ <span id="turnDisplay" class="turn-display"></span></h1>
+      <button id="btnForceQuit" class="quit-btn">🚪 退出</button>
+    </div>
 
     <div class="zone" id="opponentZone">
       <div class="info-row">
@@ -1179,6 +1209,30 @@
     }
   });
   $('btnCancelRoom').addEventListener('click', () => leaveRoom({ deleteRoom: true }));
+
+  $('btnForceQuit').addEventListener('click', async () => {
+    const msg = '対戦を強制終了してタイトルに戻りますか？\n（ルーム自体を削除するので、相手もタイトルに戻されます）';
+    if (!confirm(msg)) return;
+    try {
+      await leaveRoom({ deleteRoom: true });
+    } catch (e) {
+      console.warn(e);
+      // Even if the remote delete fails, force-clear local session
+      clearSession();
+      resetLocalState();
+      showScreen('title');
+    }
+  });
+
+  $('sessionResetLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!confirm('localStorage に保存されている前回のセッション情報を削除します。よろしいですか？')) return;
+    clearSession();
+    location.reload();
+  });
+
+  // Show the session-reset escape hatch on title if any lingering session exists
+  if (loadSession()) $('sessionResetWrap').style.display = 'block';
 
   $('modalRematch').addEventListener('click', requestRematch);
   $('modalBackTitle').addEventListener('click', async () => {
