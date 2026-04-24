@@ -51,6 +51,27 @@
     text-shadow: 0 0 8px rgba(255, 203, 61, 0.4);
   }
 
+  .mode-nav {
+    text-align: center;
+    margin-top: -4px;
+  }
+  .mode-nav a {
+    display: inline-block;
+    background: linear-gradient(135deg, #4a90e2, #9b59b6);
+    color: #fff;
+    text-decoration: none;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 0.9em;
+    font-weight: bold;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .mode-nav a:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 14px rgba(155, 89, 182, 0.5);
+  }
+
   .zone {
     background: rgba(15, 52, 96, 0.55);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -366,6 +387,9 @@
 <body>
 <div id="app">
   <h1>⚔ レジェンダリーじゃんけん ⚔</h1>
+  <div class="mode-nav">
+    <a href="janken-online.html">🌐 オンライン対戦モードへ →</a>
+  </div>
 
   <!-- CPU zone -->
   <div class="zone" id="cpuZone">
