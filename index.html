@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>レジェンダリーじゃんけん</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --bg2: #16213e;
+    --panel: #0f3460;
+    --text: #e8e8f0;
+    --muted: #a0a0c0;
+    --accent: #ffcb3d;
+    --danger: #ff5a5f;
+    --win: #3ddc84;
+
+    --common: #9aa0a6;
+    --rare: #4a90e2;
+    --srare: #9b59b6;
+    --legend: #ffb300;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    background: linear-gradient(135deg, var(--bg), var(--bg2));
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  h1 {
+    text-align: center;
+    margin: 4px 0;
+    font-size: 1.3em;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    text-shadow: 0 0 8px rgba(255, 203, 61, 0.4);
+  }
+
+  .zone {
+    background: rgba(15, 52, 96, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .name {
+    font-weight: bold;
+    font-size: 1.05em;
+  }
+
+  .stats {
+    display: flex;
+    gap: 14px;
+    font-size: 0.9em;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .life-wrap {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .life-bar {
+    height: 14px;
+    background: #2a2a44;
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.6);
+  }
+
+  .life-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--win), #7ef8a8);
+    transition: width 0.5s ease;
+    width: 100%;
+  }
+
+  .life-fill.low { background: linear-gradient(90deg, var(--danger), #ffb0b2); }
+
+  .life-text {
+    font-size: 0.85em;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* Battlefield */
+  #battlefield {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    padding: 16px;
+  }
+
+  .cards-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+
+  .slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .slot-label {
+    font-size: 0.85em;
+    color: var(--muted);
+  }
+
+  .slot-empty {
+    width: 110px;
+    height: 160px;
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 0.85em;
+  }
+
+  .verdict {
+    min-height: 60px;
+    text-align: center;
+    font-size: 1em;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .verdict .headline {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .verdict .multi {
+    color: #ffb0b2;
+  }
+
+  /* Card */
+  .card {
+    width: 110px;
+    height: 160px;
+    border-radius: 12px;
+    background: linear-gradient(160deg, #26263f, #1a1a30);
+    border: 3px solid var(--common);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8px;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    user-select: none;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  }
+
+  .card.rarity-common   { border-color: var(--common); }
+  .card.rarity-rare     { border-color: var(--rare);  box-shadow: 0 0 10px rgba(74,144,226,0.5); }
+  .card.rarity-srare    { border-color: var(--srare); box-shadow: 0 0 12px rgba(155,89,182,0.6); }
+  .card.rarity-legend   { border-color: var(--legend); box-shadow: 0 0 16px rgba(255,179,0,0.8); animation: legendGlow 2s infinite alternate; }
+
+  @keyframes legendGlow {
+    from { box-shadow: 0 0 10px rgba(255,179,0,0.6); }
+    to   { box-shadow: 0 0 20px rgba(255,179,0,1); }
+  }
+
+  .card .hand {
+    font-size: 2.6em;
+    text-align: center;
+    line-height: 1;
+    margin-top: 4px;
+  }
+
+  .card .elem {
+    font-size: 1.4em;
+    text-align: center;
+  }
+
+  .card .rarity-label {
+    font-size: 0.7em;
+    text-align: center;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .card .atk {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 8px;
+    padding: 1px 6px;
+    font-weight: bold;
+    font-size: 0.9em;
+    color: var(--accent);
+  }
+
+  .hand-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .hand-row .card.selectable:hover:not(.disabled) {
+    transform: translateY(-10px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.7);
+  }
+
+  .card.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .card.played-enter {
+    animation: playEnter 0.5s ease forwards;
+  }
+  @keyframes playEnter {
+    from { transform: translateY(-40px) scale(0.6); opacity: 0; }
+    to   { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
+  .card-back {
+    width: 110px;
+    height: 160px;
+    border-radius: 12px;
+    background:
+      repeating-linear-gradient(45deg, #3a3a5e 0 10px, #2a2a44 10px 20px);
+    border: 3px solid #555577;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2em;
+    color: var(--accent);
+  }
+
+  .damage-float {
+    position: absolute;
+    font-size: 2em;
+    font-weight: bold;
+    color: var(--danger);
+    text-shadow: 0 0 6px rgba(0,0,0,0.8);
+    pointer-events: none;
+    animation: floatUp 1.2s ease forwards;
+  }
+  @keyframes floatUp {
+    from { transform: translateY(0); opacity: 1; }
+    to   { transform: translateY(-60px); opacity: 0; }
+  }
+
+  .shake {
+    animation: shake 0.4s ease;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    50% { transform: translateX(6px); }
+    75% { transform: translateX(-4px); }
+  }
+
+  /* Controls & modal */
+  .controls {
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  button {
+    background: var(--accent);
+    color: #1a1a2e;
+    border: none;
+    padding: 10px 22px;
+    font-size: 1em;
+    font-weight: bold;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    transition: transform 0.15s;
+  }
+  button:hover { transform: translateY(-2px); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .modal.show { display: flex; }
+  .modal-inner {
+    background: linear-gradient(160deg, #2a2a44, #1a1a2e);
+    padding: 24px 32px;
+    border-radius: 16px;
+    text-align: center;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 30px rgba(255, 203, 61, 0.4);
+    max-width: 90%;
+  }
+  .modal-inner h2 {
+    margin-top: 0;
+    color: var(--accent);
+    font-size: 1.6em;
+  }
+  .modal-inner p { color: var(--text); }
+
+  .log {
+    max-height: 90px;
+    overflow-y: auto;
+    font-size: 0.82em;
+    color: var(--muted);
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-top: 4px;
+  }
+  .log div { margin: 2px 0; }
+
+  @media (max-width: 520px) {
+    .card, .slot-empty, .card-back { width: 88px; height: 130px; }
+    .card .hand { font-size: 2em; }
+    .card .elem { font-size: 1.1em; }
+    .hand-row { gap: 4px; }
+    .cards-row { gap: 14px; }
+    h1 { font-size: 1.1em; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>⚔ レジェンダリーじゃんけん ⚔</h1>
+
+  <!-- CPU zone -->
+  <div class="zone" id="cpuZone">
+    <div class="info-row">
+      <div class="name">🤖 CPU</div>
+      <div class="stats">
+        <span>デッキ: <b id="cpuDeck">0</b></span>
+        <span>手札: <b id="cpuHandCount">0</b></span>
+      </div>
+    </div>
+    <div class="life-wrap">
+      <div class="life-bar"><div class="life-fill" id="cpuLifeFill"></div></div>
+      <div class="life-text">ライフ: <span id="cpuLife">0</span> / <span id="cpuLifeMax">0</span></div>
+    </div>
+  </div>
+
+  <!-- Battlefield -->
+  <div class="zone" id="battlefield">
+    <div class="cards-row">
+      <div class="slot">
+        <div class="slot-label">CPU</div>
+        <div id="cpuSlot" class="slot-empty">未使用</div>
+      </div>
+      <div class="slot">
+        <div class="slot-label">あなた</div>
+        <div id="playerSlot" class="slot-empty">未使用</div>
+      </div>
+    </div>
+    <div class="verdict" id="verdict">手札からカードを選んでください。</div>
+    <div class="log" id="log"></div>
+    <div class="controls">
+      <button id="nextBtn" style="display:none;">次のターンへ</button>
+      <button id="restartBtn" style="display:none;">もう一度</button>
+    </div>
+  </div>
+
+  <!-- Player zone -->
+  <div class="zone" id="playerZone">
+    <div class="info-row">
+      <div class="name">🧑 あなた</div>
+      <div class="stats">
+        <span>デッキ: <b id="playerDeck">0</b></span>
+        <span>手札: <b id="playerHandCount">0</b></span>
+      </div>
+    </div>
+    <div class="life-wrap">
+      <div class="life-bar"><div class="life-fill" id="playerLifeFill"></div></div>
+      <div class="life-text">ライフ: <span id="playerLife">0</span> / <span id="playerLifeMax">0</span></div>
+    </div>
+    <div class="hand-row" id="playerHand"></div>
+  </div>
+</div>
+
+<!-- Result modal -->
+<div class="modal" id="modal">
+  <div class="modal-inner">
+    <h2 id="modalTitle">-</h2>
+    <p id="modalBody">-</p>
+    <button id="modalRestart">もう一度プレイ</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Constants ----------
+  const HANDS = ['rock', 'scissors', 'paper'];
+  const HAND_LABEL = { rock: 'グー', scissors: 'チョキ', paper: 'パー' };
+  const HAND_ICON  = { rock: '✊', scissors: '✌️', paper: '✋' };
+
+  const ELEMS = ['fire', 'water', 'grass'];
+  const ELEM_LABEL = { fire: '火', water: '水', grass: '草' };
+  const ELEM_ICON  = { fire: '🔥', water: '💧', grass: '🌿' };
+
+  const RARITIES = [
+    { key: 'common', label: 'コモン',        atk: 1, weight: 40, cls: 'rarity-common' },
+    { key: 'rare',   label: 'レア',          atk: 2, weight: 30, cls: 'rarity-rare'   },
+    { key: 'srare',  label: 'スーパーレア',  atk: 3, weight: 20, cls: 'rarity-srare'  },
+    { key: 'legend', label: 'レジェンダリー', atk: 4, weight: 10, cls: 'rarity-legend' }
+  ];
+
+  const INIT_LIFE = 5;
+  const DECK_SIZE = 20;
+  const HAND_SIZE = 3;
+
+  // ---------- State ----------
+  const state = {
+    player: null,
+    cpu: null,
+    turn: 0,
+    locked: false,
+    ended: false
+  };
+
+  // ---------- Utility ----------
+  const rand = (n) => Math.floor(Math.random() * n);
+
+  function pickRarity() {
+    const total = RARITIES.reduce((s, r) => s + r.weight, 0);
+    let n = Math.random() * total;
+    for (const r of RARITIES) {
+      if ((n -= r.weight) < 0) return r;
+    }
+    return RARITIES[0];
+  }
+
+  function makeCard() {
+    return {
+      hand: HANDS[rand(3)],
+      elem: ELEMS[rand(3)],
+      rarity: pickRarity()
+    };
+  }
+
+  function generateDeck() {
+    const deck = [];
+    for (let i = 0; i < DECK_SIZE; i++) deck.push(makeCard());
+    // Shuffle (already random, but keeps intent clear)
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = rand(i + 1);
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+  }
+
+  function createPlayer(name) {
+    const deck = generateDeck();
+    const hand = [];
+    for (let i = 0; i < HAND_SIZE && deck.length > 0; i++) {
+      hand.push(deck.pop());
+    }
+    return { name, life: INIT_LIFE, lifeMax: INIT_LIFE, deck, hand, discard: [] };
+  }
+
+  // Janken: returns 1 if a beats b, -1 if b beats a, 0 if tie
+  function jankenCompare(a, b) {
+    if (a === b) return 0;
+    if (a === 'rock'     && b === 'scissors') return 1;
+    if (a === 'scissors' && b === 'paper')    return 1;
+    if (a === 'paper'    && b === 'rock')     return 1;
+    return -1;
+  }
+
+  // Element: returns 1 if a is advantageous over b, -1 if weak, 0 if neutral
+  function elemCompare(a, b) {
+    if (a === b) return 0;
+    if (a === 'fire'  && b === 'grass') return 1;
+    if (a === 'water' && b === 'fire')  return 1;
+    if (a === 'grass' && b === 'water') return 1;
+    return -1;
+  }
+
+  // ---------- Battle logic ----------
+  function resolveBattle(pCard, cCard) {
+    const jk = jankenCompare(pCard.hand, cCard.hand);
+    const result = { pDamage: 0, cDamage: 0, kind: '', multiplier: 1, attacker: null };
+
+    if (jk !== 0) {
+      const winner = jk > 0 ? { who: 'player', card: pCard } : { who: 'cpu', card: cCard };
+      const loser  = jk > 0 ? { who: 'cpu', card: cCard } : { who: 'player', card: pCard };
+      const ec = elemCompare(winner.card.elem, loser.card.elem);
+      const mul = ec > 0 ? 2 : (ec < 0 ? 0.5 : 1);
+      const damage = winner.card.rarity.atk * mul;
+      result.kind = 'janken';
+      result.multiplier = mul;
+      result.attacker = winner.who;
+      if (winner.who === 'player') result.cDamage = damage;
+      else                         result.pDamage = damage;
+    } else {
+      const ec = elemCompare(pCard.elem, cCard.elem);
+      if (ec === 0) {
+        result.kind = 'full_draw';
+      } else if (ec > 0) {
+        result.kind = 'elem';
+        result.attacker = 'player';
+        result.cDamage = pCard.rarity.atk;
+      } else {
+        result.kind = 'elem';
+        result.attacker = 'cpu';
+        result.pDamage = cCard.rarity.atk;
+      }
+    }
+    return result;
+  }
+
+  // ---------- Rendering ----------
+  const $ = (id) => document.getElementById(id);
+
+  function cardEl(card, opts = {}) {
+    const el = document.createElement('div');
+    el.className = `card ${card.rarity.cls}`;
+    if (opts.animate) el.classList.add('played-enter');
+    el.innerHTML = `
+      <div class="atk">ATK ${card.rarity.atk}</div>
+      <div class="hand" title="${HAND_LABEL[card.hand]}">${HAND_ICON[card.hand]}</div>
+      <div class="elem" title="${ELEM_LABEL[card.elem]}">${ELEM_ICON[card.elem]} ${ELEM_LABEL[card.elem]}</div>
+      <div class="rarity-label">${card.rarity.label}</div>
+    `;
+    return el;
+  }
+
+  function renderHand() {
+    const host = $('playerHand');
+    host.innerHTML = '';
+    state.player.hand.forEach((card, idx) => {
+      const el = cardEl(card);
+      el.classList.add('selectable');
+      if (state.locked || state.ended) el.classList.add('disabled');
+      el.addEventListener('click', () => onCardClick(idx));
+      host.appendChild(el);
+    });
+  }
+
+  function renderStats() {
+    $('playerLife').textContent = Math.max(0, state.player.life);
+    $('playerLifeMax').textContent = state.player.lifeMax;
+    $('cpuLife').textContent = Math.max(0, state.cpu.life);
+    $('cpuLifeMax').textContent = state.cpu.lifeMax;
+
+    const pPct = Math.max(0, state.player.life / state.player.lifeMax) * 100;
+    const cPct = Math.max(0, state.cpu.life / state.cpu.lifeMax) * 100;
+    const pFill = $('playerLifeFill');
+    const cFill = $('cpuLifeFill');
+    pFill.style.width = pPct + '%';
+    cFill.style.width = cPct + '%';
+    pFill.classList.toggle('low', pPct < 33);
+    cFill.classList.toggle('low', cPct < 33);
+
+    $('playerDeck').textContent = state.player.deck.length;
+    $('playerHandCount').textContent = state.player.hand.length;
+    $('cpuDeck').textContent = state.cpu.deck.length;
+    $('cpuHandCount').textContent = state.cpu.hand.length;
+  }
+
+  function setVerdict(html) {
+    $('verdict').innerHTML = html;
+  }
+
+  function addLog(msg) {
+    const log = $('log');
+    const d = document.createElement('div');
+    d.textContent = `T${state.turn}: ${msg}`;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function showDamage(targetEl, amount) {
+    if (!targetEl) return;
+    const d = document.createElement('div');
+    d.className = 'damage-float';
+    d.textContent = `-${amount}`;
+    const rect = targetEl.getBoundingClientRect();
+    const parentRect = $('battlefield').getBoundingClientRect();
+    d.style.left = (rect.left - parentRect.left + rect.width / 2 - 20) + 'px';
+    d.style.top  = (rect.top  - parentRect.top  + 10) + 'px';
+    $('battlefield').appendChild(d);
+    targetEl.classList.add('shake');
+    setTimeout(() => targetEl.classList.remove('shake'), 400);
+    setTimeout(() => d.remove(), 1200);
+  }
+
+  // ---------- Game flow ----------
+  function startGame() {
+    state.player = createPlayer('あなた');
+    state.cpu = createPlayer('CPU');
+    state.turn = 0;
+    state.locked = false;
+    state.ended = false;
+    $('log').innerHTML = '';
+    $('playerSlot').outerHTML = '<div id="playerSlot" class="slot-empty">未使用</div>';
+    $('cpuSlot').outerHTML = '<div id="cpuSlot" class="slot-empty">未使用</div>';
+    $('nextBtn').style.display = 'none';
+    $('restartBtn').style.display = 'none';
+    $('modal').classList.remove('show');
+    setVerdict('手札からカードを選んでください。');
+    renderHand();
+    renderStats();
+  }
+
+  function onCardClick(idx) {
+    if (state.locked || state.ended) return;
+    const pCard = state.player.hand.splice(idx, 1)[0];
+    state.player.discard.push(pCard);
+
+    // CPU picks randomly
+    const cIdx = rand(state.cpu.hand.length);
+    const cCard = state.cpu.hand.splice(cIdx, 1)[0];
+    state.cpu.discard.push(cCard);
+
+    state.locked = true;
+    state.turn += 1;
+
+    playRound(pCard, cCard);
+  }
+
+  function playRound(pCard, cCard) {
+    // Replace slots with played cards
+    const pSlot = $('playerSlot');
+    const cSlot = $('cpuSlot');
+
+    const pEl = cardEl(pCard, { animate: true });
+    pEl.id = 'playerSlot';
+    pSlot.replaceWith(pEl);
+
+    const cEl = cardEl(cCard, { animate: true });
+    cEl.id = 'cpuSlot';
+    cSlot.replaceWith(cEl);
+
+    renderHand();
+    renderStats();
+
+    // Resolve after short delay for animation feel
+    setTimeout(() => {
+      const res = resolveBattle(pCard, cCard);
+      applyBattleResult(pCard, cCard, res);
+    }, 500);
+  }
+
+  function applyBattleResult(pCard, cCard, res) {
+    let headline = '';
+    let detail = '';
+    const pIcon = `${HAND_ICON[pCard.hand]} ${ELEM_ICON[pCard.elem]}${pCard.rarity.label}(ATK${pCard.rarity.atk})`;
+    const cIcon = `${HAND_ICON[cCard.hand]} ${ELEM_ICON[cCard.elem]}${cCard.rarity.label}(ATK${cCard.rarity.atk})`;
+
+    if (res.kind === 'janken') {
+      const who = res.attacker === 'player' ? 'あなた' : 'CPU';
+      const dmg = res.attacker === 'player' ? res.cDamage : res.pDamage;
+      const mulText = res.multiplier === 2 ? '（こうかばつぐん ×2）'
+                   : res.multiplier === 0.5 ? '（いまひとつ ×0.5）'
+                   : '（等倍）';
+      headline = `${who}のじゃんけん勝利！`;
+      detail = `${pIcon} vs ${cIcon}<br>${who}が ${dmg} ダメージ <span class="multi">${mulText}</span>`;
+    } else if (res.kind === 'elem') {
+      const who = res.attacker === 'player' ? 'あなた' : 'CPU';
+      const dmg = res.attacker === 'player' ? res.cDamage : res.pDamage;
+      headline = `あいこ → 属性勝負！${who}が有利`;
+      detail = `${pIcon} vs ${cIcon}<br>${who}が ${dmg} ダメージ（基礎値）`;
+    } else {
+      headline = `完全な引き分け`;
+      detail = `${pIcon} vs ${cIcon}<br>同じ手・同じ属性 → ダメージなし`;
+    }
+
+    setVerdict(`<div class="headline">${headline}</div>${detail}`);
+    addLog(`${pIcon} vs ${cIcon} → ${headline.replace(/<[^>]+>/g, '')}`);
+
+    // Apply damage with animation
+    if (res.pDamage > 0) {
+      state.player.life -= res.pDamage;
+      showDamage($('playerSlot'), res.pDamage);
+    }
+    if (res.cDamage > 0) {
+      state.cpu.life -= res.cDamage;
+      showDamage($('cpuSlot'), res.cDamage);
+    }
+
+    setTimeout(() => {
+      renderStats();
+      // Draw phase
+      if (state.player.deck.length > 0) state.player.hand.push(state.player.deck.pop());
+      if (state.cpu.deck.length > 0)    state.cpu.hand.push(state.cpu.deck.pop());
+      renderStats();
+      renderHand();
+
+      // Check end
+      if (checkEnd()) return;
+
+      // Continue: show Next button, or auto-continue
+      $('nextBtn').style.display = 'inline-block';
+    }, 900);
+  }
+
+  function nextTurn() {
+    $('nextBtn').style.display = 'none';
+    // Reset slots to empty
+    const pSlot = $('playerSlot');
+    const cSlot = $('cpuSlot');
+    pSlot.outerHTML = '<div id="playerSlot" class="slot-empty">未使用</div>';
+    cSlot.outerHTML = '<div id="cpuSlot" class="slot-empty">未使用</div>';
+    setVerdict('手札からカードを選んでください。');
+    state.locked = false;
+    renderHand();
+  }
+
+  function checkEnd() {
+    const pDead = state.player.life <= 0;
+    const cDead = state.cpu.life <= 0;
+    const pOut  = state.player.hand.length === 0 && state.player.deck.length === 0;
+    const cOut  = state.cpu.hand.length === 0 && state.cpu.deck.length === 0;
+
+    if (pDead || cDead || (pOut && cOut)) {
+      state.ended = true;
+      let title, body;
+      if (pDead && cDead) {
+        title = '引き分け';
+        body = '両者同時にライフが尽きました。';
+      } else if (pDead) {
+        title = '敗北…';
+        body = `あなたのライフが 0 に。CPUのライフ: ${Math.max(0, state.cpu.life)}`;
+      } else if (cDead) {
+        title = '勝利！';
+        body = `CPUを倒しました！あなたのライフ: ${Math.max(0, state.player.life)}`;
+      } else {
+        // Both out of cards
+        if (state.player.life > state.cpu.life) {
+          title = '勝利！'; body = `カード枯渇。ライフ差で勝利！ (${state.player.life} vs ${state.cpu.life})`;
+        } else if (state.cpu.life > state.player.life) {
+          title = '敗北…'; body = `カード枯渇。ライフ差で敗北。(${state.player.life} vs ${state.cpu.life})`;
+        } else {
+          title = '引き分け'; body = `カードもライフも同じ。完全な引き分けです。`;
+        }
+      }
+      showEnd(title, body);
+      return true;
+    }
+    return false;
+  }
+
+  function showEnd(title, body) {
+    $('modalTitle').textContent = title;
+    $('modalBody').textContent = body;
+    $('modal').classList.add('show');
+    $('nextBtn').style.display = 'none';
+    $('restartBtn').style.display = 'inline-block';
+  }
+
+  // ---------- Wire up ----------
+  $('nextBtn').addEventListener('click', nextTurn);
+  $('restartBtn').addEventListener('click', startGame);
+  $('modalRestart').addEventListener('click', startGame);
+
+  startGame();
+})();
+</script>
+</body>
+</html>
