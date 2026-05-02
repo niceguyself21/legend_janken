@@ -732,6 +732,14 @@
     if (a === 'grass' && b === 'water') return 1;
     return -1;
   }
+  // Turn-based declarer alternation
+  function otherPlayer(p) { return p === 'player1' ? 'player2' : 'player1'; }
+  function currentDeclarer(data) {
+    const fd = data?.firstDeclarer || 'player1';
+    const turn = data?.turn || 1;
+    return ((turn - 1) % 2 === 0) ? fd : otherPlayer(fd);
+  }
+
   // The hand the declared hand BEATS — so a Rock declaration allows the bluff option of Scissors.
   function oppositeHand(h) {
     if (h === 'rock')     return 'scissors';
@@ -739,32 +747,41 @@
     if (h === 'paper')    return 'rock';
     return null;
   }
+  // Declaration multiplier — { dealt, received }
+  //   宣言と同じ手を出した: dealt ×1.2 (received は等倍)
+  //   ブラフ(示した手と反対の相性の手): dealt ×0.8 かつ received ×1.2
+  //   未宣言: 補正なし
   function declareMultiplier(card, declared) {
-    if (!declared) return 1;
-    if (card.hand === declared) return 1.2;
-    if (card.hand === oppositeHand(declared)) return 0.8;
-    return 1;
+    if (!declared) return { dealt: 1, received: 1 };
+    if (card.hand === declared) return { dealt: 1.2, received: 1 };
+    if (card.hand === oppositeHand(declared)) return { dealt: 0.8, received: 1.2 };
+    return { dealt: 1, received: 1 };
   }
-  // Returns {p1Damage, p2Damage, kind, multiplier, attacker, p1DeclareMul, p2DeclareMul}
+  // Returns {p1Damage, p2Damage, kind, multiplier, attacker,
+  //         p1DeclareMul, p2DeclareMul, p1ReceivedMul, p2ReceivedMul}
   function resolveBattle(p1Card, p2Card, p1Declared, p2Declared) {
     const jk = jankenCompare(p1Card.hand, p2Card.hand);
+    const p1M = declareMultiplier(p1Card, p1Declared);
+    const p2M = declareMultiplier(p2Card, p2Declared);
     const out = {
       p1Damage: 0, p2Damage: 0, kind: '', multiplier: 1, attacker: null,
-      p1DeclareMul: 1, p2DeclareMul: 1,
+      p1DeclareMul: p1M.dealt, p2DeclareMul: p2M.dealt,
+      p1ReceivedMul: p1M.received, p2ReceivedMul: p2M.received,
     };
-    const p1DeclMul = declareMultiplier(p1Card, p1Declared);
-    const p2DeclMul = declareMultiplier(p2Card, p2Declared);
     if (jk !== 0) {
-      const winner   = jk > 0 ? { who: 'player1', card: p1Card, decl: p1DeclMul } : { who: 'player2', card: p2Card, decl: p2DeclMul };
-      const loser    = jk > 0 ? { who: 'player2', card: p2Card } : { who: 'player1', card: p1Card };
-      const ec = elemCompare(winner.card.elem, loser.card.elem);
+      const winnerSide = jk > 0 ? 'player1' : 'player2';
+      const winnerCard = jk > 0 ? p1Card : p2Card;
+      const loserCard  = jk > 0 ? p2Card : p1Card;
+      const winnerM    = jk > 0 ? p1M : p2M;
+      const loserM     = jk > 0 ? p2M : p1M;
+      const ec = elemCompare(winnerCard.elem, loserCard.elem);
       const mul = ec > 0 ? 2 : (ec < 0 ? 0.5 : 1);
-      const dmg = cardAtk(winner.card) * mul * winner.decl;
+      const dmg = cardAtk(winnerCard) * mul * winnerM.dealt * loserM.received;
       out.kind = 'janken';
       out.multiplier = mul;
-      out.attacker = winner.who;
-      if (winner.who === 'player1') { out.p2Damage = dmg; out.p1DeclareMul = p1DeclMul; }
-      else                           { out.p1Damage = dmg; out.p2DeclareMul = p2DeclMul; }
+      out.attacker = winnerSide;
+      if (winnerSide === 'player1') out.p2Damage = dmg;
+      else                          out.p1Damage = dmg;
     } else {
       // Aiko: no damage regardless of element matchup.
       out.kind = 'draw';
@@ -829,6 +846,7 @@
       const code = await generateUniqueCode();
       const p1 = buildInitialPlayer(true, nickname);
       const p2 = buildInitialPlayer(false, null);
+      const firstDeclarer = Math.random() < 0.5 ? 'player1' : 'player2';
       await set(ref(db, `rooms/${code}`), {
         status: 'waiting',
         createdAt: Date.now(),
@@ -837,6 +855,7 @@
         guestName: null,
         turn: 1,
         phase: 'declare',
+        firstDeclarer,
         battleResult: null,
         winner: null,
         player1: p1,
@@ -1036,6 +1055,8 @@
             p2Damage: res.p2Damage,
             p1DeclareMul: res.p1DeclareMul,
             p2DeclareMul: res.p2DeclareMul,
+            p1ReceivedMul: res.p1ReceivedMul,
+            p2ReceivedMul: res.p2ReceivedMul,
             kind: res.kind,
             multiplier: res.multiplier,
             attacker: res.attacker,
@@ -1134,10 +1155,12 @@
   async function rebuildForRematch(data) {
     const p1 = buildInitialPlayer(!!(data.player1 && data.player1.connected), data.player1?.name || null);
     const p2 = buildInitialPlayer(!!(data.player2 && data.player2.connected), data.player2?.name || null);
+    const firstDeclarer = Math.random() < 0.5 ? 'player1' : 'player2';
     await update(ref(db, `rooms/${state.roomCode}`), {
       status: 'playing',
       turn: 1,
       phase: 'declare',
+      firstDeclarer,
       battleResult: null,
       winner: null,
       player1: p1,
@@ -1197,7 +1220,7 @@
     const isJankenPhase = phase === 'janken';
 
     // Phase indicator
-    renderPhaseIndicator(phase, data.status);
+    renderPhaseIndicator(phase, data.status, data);
 
     const host = $('meHandRow');
     host.innerHTML = '';
@@ -1218,7 +1241,7 @@
       host.appendChild(el);
     });
 
-    renderDeclareUI(me, opp, battleActive, data.status, phase);
+    renderDeclareUI(me, opp, battleActive, data.status, phase, data);
 
     // Slots — skip while battleResult is active (handleBattleAnimation manages them)
     if (!data.battleResult) {
@@ -1279,7 +1302,7 @@
     }
   }
 
-  function renderPhaseIndicator(phase, status) {
+  function renderPhaseIndicator(phase, status, data) {
     const el = $('phaseIndicator');
     if (status !== 'playing') {
       el.style.display = 'none';
@@ -1290,12 +1313,19 @@
       el.textContent = '✊ じゃんけんフェーズ — 手札からカードを出してください';
       el.className = 'phase-indicator janken';
     } else {
-      el.textContent = '🎯 宣言/スキルフェーズ — 行動を決めて「決定」を押してください';
+      const declarer = currentDeclarer(data || {});
+      const iAmDeclarer = declarer === state.playerId;
+      const declarerName = data?.[declarer]?.name || (declarer === 'player1' ? 'P1' : 'P2');
+      if (iAmDeclarer) {
+        el.textContent = `🎯 宣言フェーズ（先攻：あなた）— 手を示すか、そのまま決定`;
+      } else {
+        el.textContent = `🎯 宣言フェーズ（先攻：${declarerName}）— 相手の宣言を待っています`;
+      }
       el.className = 'phase-indicator';
     }
   }
 
-  function renderDeclareUI(me, opp, battleActive, status, phase) {
+  function renderDeclareUI(me, opp, battleActive, status, phase, data) {
     const myStatus = $('meDeclareStatus');
     const myBtn = $('btnDeclare');
     const myPicker = $('declarePicker');
@@ -1304,23 +1334,37 @@
 
     const inDeclarePhase = phase === 'declare';
     const myCommitted = !!me.phaseReady;
-    const canDeclare = inDeclarePhase && !myCommitted && !me.declaredHand && !me.selectedCard && !battleActive && status === 'playing';
-    const canCommit = inDeclarePhase && !myCommitted && !battleActive && status === 'playing';
+    const oppCommitted = !!opp.phaseReady;
+    const declarer = data ? currentDeclarer(data) : 'player1';
+    const iAmDeclarer = declarer === state.playerId;
+    const declarerCommitted = iAmDeclarer ? myCommitted : oppCommitted;
 
+    const canDeclare = inDeclarePhase && iAmDeclarer && !myCommitted && !me.declaredHand && !me.selectedCard && !battleActive && status === 'playing';
+    // Sequential commit: 先攻 can commit anytime; 後攻 only after 先攻 committed
+    const canCommit = inDeclarePhase && !myCommitted && !battleActive && status === 'playing'
+                      && (iAmDeclarer || declarerCommitted);
+
+    // Status text for me
     if (me.declaredHand) {
       myStatus.classList.add('declared');
-      myStatus.innerHTML = `👁 あなたは <b>${HAND_ICON[me.declaredHand]} ${HAND_LABEL[me.declaredHand]}</b> を示しました（命中 ×1.2 / ブラフ ×0.8）`;
+      myStatus.innerHTML = `👁 あなたは <b>${HAND_ICON[me.declaredHand]} ${HAND_LABEL[me.declaredHand]}</b> を示しました（命中: 与×1.2 / ブラフ: 与×0.8 + 被×1.2）`;
     } else {
       myStatus.classList.remove('declared');
-      if (inDeclarePhase) {
+      if (!inDeclarePhase) {
+        myStatus.textContent = '';
+      } else if (iAmDeclarer) {
         myStatus.textContent = myCommitted
           ? '宣言なしで決定しました（補正なし）'
-          : '次の手を示すとダメージ補正がかかる（×1.2 / ×0.8）';
+          : '🎯 あなたの宣言ターン — 「手を示す」か、そのまま「決定」';
       } else {
-        myStatus.textContent = '';
+        // 後攻
+        if (myCommitted) myStatus.textContent = '✓ 決定済み';
+        else if (declarerCommitted) myStatus.textContent = '相手は決定しました — 「決定」を押してじゃんけんへ進みます';
+        else myStatus.textContent = '⏳ 相手のターン — 宣言を待っています…';
       }
     }
 
+    // Declare button + picker (only when 先攻 can declare)
     if (canDeclare) {
       if (myPicker.classList.contains('open')) {
         myBtn.style.display = 'none';
@@ -1341,22 +1385,38 @@
       myPicker.classList.remove('open');
     }
 
+    // Commit button
     if (canCommit) {
       phaseBtn.style.display = 'inline-block';
       phaseBtn.disabled = false;
-      phaseBtn.textContent = me.declaredHand ? '🆗 決定 → じゃんけんへ' : '🆗 宣言なしで決定';
+      if (iAmDeclarer) {
+        phaseBtn.textContent = me.declaredHand ? '🆗 決定 → じゃんけんへ' : '🆗 宣言なしで決定';
+      } else {
+        phaseBtn.textContent = '🆗 確認して じゃんけんへ';
+      }
     } else if (inDeclarePhase && myCommitted) {
       phaseBtn.style.display = 'inline-block';
       phaseBtn.disabled = true;
       phaseBtn.textContent = '✓ 決定済み（相手待ち）';
+    } else if (inDeclarePhase && !iAmDeclarer && !declarerCommitted) {
+      phaseBtn.style.display = 'inline-block';
+      phaseBtn.disabled = true;
+      phaseBtn.textContent = '⏳ 先攻の決定待ち';
     } else {
       phaseBtn.style.display = 'none';
     }
 
+    // Opponent status
     if (opp.declaredHand) {
       oppStatus.innerHTML = `👁 相手は <b>${HAND_ICON[opp.declaredHand]} ${HAND_LABEL[opp.declaredHand]}</b> を示している`;
     } else if (inDeclarePhase) {
-      oppStatus.textContent = opp.phaseReady ? '✓ 相手は決定済み' : '相手は思考中…';
+      if (declarer !== state.playerId) {
+        // Opponent is the declarer
+        oppStatus.textContent = oppCommitted ? '✓ 相手は宣言なしで決定しました' : '🎯 相手の宣言ターン';
+      } else {
+        // I'm the declarer; opponent is waiting
+        oppStatus.textContent = oppCommitted ? '✓ 相手も決定済み' : '⏳ 相手はあなたの宣言を待機中';
+      }
     } else {
       oppStatus.textContent = '';
     }
@@ -1413,6 +1473,7 @@
     const me = room[state.playerId] || {};
     if (me.declaredHand || me.selectedCard || me.phaseReady || room.battleResult || room.status !== 'playing') return;
     if ((room.phase || 'declare') !== 'declare') return;
+    if (currentDeclarer(room) !== state.playerId) return;
     state.declaring = true;
     try {
       await update(ref(db, `rooms/${state.roomCode}/${state.playerId}`), { declaredHand: hand });
@@ -1434,6 +1495,9 @@
     if (room.status !== 'playing') return;
     if ((room.phase || 'declare') !== 'declare') return;
     if (me.phaseReady) return;
+    // Sequential rule: 後攻 must wait until 先攻 has committed
+    const declarer = currentDeclarer(room);
+    if (declarer !== state.playerId && !room[declarer]?.phaseReady) return;
     state.committingPhase = true;
     try {
       await update(ref(db, `rooms/${state.roomCode}/${state.playerId}`), { phaseReady: true });
@@ -1470,6 +1534,7 @@
     const fmtDmg = (n) => fmtNum(n);
     const declareText = (mul) => mul === 1.2 ? ' ✨宣言ヒット ×1.2'
                                 : mul === 0.8 ? ' 💨ブラフ ×0.8' : '';
+    const receivedText = (mul) => mul === 1.2 ? ' 💢ブラフ被弾 ×1.2' : '';
     let headline = '', detail = '';
     const meDesc = pIcon(myCard), oppDesc = pIcon(oppCard);
     if (res.kind === 'janken') {
@@ -1481,8 +1546,10 @@
                     : res.multiplier === 0.5 ? '（いまひとつ ×0.5）'
                     : '（等倍）';
       const attackerDeclMul = res.attacker === 'player1' ? (res.p1DeclareMul || 1) : (res.p2DeclareMul || 1);
+      const loserSide = res.attacker === 'player1' ? 'player2' : 'player1';
+      const loserRecMul = loserSide === 'player1' ? (res.p1ReceivedMul || 1) : (res.p2ReceivedMul || 1);
       headline = `${who}のじゃんけん勝利！`;
-      detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>${who}が ${fmtDmg(dmg)} ダメージ <span class="multi">${mulText}${declareText(attackerDeclMul)}</span>`;
+      detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>${who}が ${fmtDmg(dmg)} ダメージ <span class="multi">${mulText}${declareText(attackerDeclMul)}${receivedText(loserRecMul)}</span>`;
     } else {
       headline = `あいこ → ダメージなし`;
       detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>じゃんけんに勝たないとダメージは通りません`;
@@ -1787,7 +1854,8 @@
       state.room[state.oppId] || {},
       !!state.room.battleResult || state.room.status === 'finished',
       state.room.status,
-      state.room.phase || 'declare'
+      state.room.phase || 'declare',
+      state.room
     );
   });
   $('declarePicker').querySelectorAll('button[data-hand]').forEach(btn => {
