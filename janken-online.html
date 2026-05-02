@@ -1012,11 +1012,11 @@
   // Host loop — judge + advance + rematch
   // =========================
   async function hostLoop(data) {
-    // Advance from declare phase to janken phase when both phaseReady
+    // Advance from declare phase to janken phase when 先攻 (declarer) commits
     if (data.status === 'playing'
         && (data.phase || 'declare') === 'declare'
         && data.player1 && data.player2
-        && data.player1.phaseReady && data.player2.phaseReady
+        && data[currentDeclarer(data)]?.phaseReady
         && !state.processingPhaseAdvance) {
       state.processingPhaseAdvance = true;
       try {
@@ -1274,18 +1274,24 @@
     if (battleActive) {
       // verdict is set by animation
     } else if (!isJankenPhase) {
-      // Declare phase status
-      const meReady = !!me.phaseReady;
-      const oppReady = !!opp.phaseReady;
-      if (meReady && !oppReady) {
-        $('verdict').textContent = '相手の決定を待っています…';
-        $('waitingNote').innerHTML = '<span class="spinner"></span> 待機中';
-      } else if (!meReady && oppReady) {
-        $('verdict').textContent = '相手は決定しました。あなたの番です。';
-        $('waitingNote').textContent = '';
+      const declarer = currentDeclarer(data);
+      const declarerReady = !!data[declarer]?.phaseReady;
+      if (declarer === state.playerId) {
+        if (declarerReady) {
+          $('verdict').textContent = '決定済み — じゃんけんフェーズへ進みます…';
+          $('waitingNote').innerHTML = '<span class="spinner"></span>';
+        } else {
+          $('verdict').textContent = 'あなたの宣言ターン — 手を示すか、そのまま「決定」を押してください';
+          $('waitingNote').textContent = '';
+        }
       } else {
-        $('verdict').textContent = '宣言フェーズ — 次の手を示すか、そのまま「決定」を押してください';
-        $('waitingNote').textContent = '';
+        if (declarerReady) {
+          $('verdict').textContent = '相手は決定しました — じゃんけんフェーズへ移行します';
+          $('waitingNote').innerHTML = '<span class="spinner"></span>';
+        } else {
+          $('verdict').textContent = '相手(先攻)の宣言を待っています…';
+          $('waitingNote').innerHTML = '<span class="spinner"></span>';
+        }
       }
     } else if (meSelected && oppSelected) {
       $('verdict').textContent = '判定中…';
@@ -1340,9 +1346,8 @@
     const declarerCommitted = iAmDeclarer ? myCommitted : oppCommitted;
 
     const canDeclare = inDeclarePhase && iAmDeclarer && !myCommitted && !me.declaredHand && !me.selectedCard && !battleActive && status === 'playing';
-    // Sequential commit: 先攻 can commit anytime; 後攻 only after 先攻 committed
-    const canCommit = inDeclarePhase && !myCommitted && !battleActive && status === 'playing'
-                      && (iAmDeclarer || declarerCommitted);
+    // Only 先攻 can commit; 後攻 has no commit action
+    const canCommit = inDeclarePhase && iAmDeclarer && !myCommitted && !battleActive && status === 'playing';
 
     // Status text for me
     if (me.declaredHand) {
@@ -1357,10 +1362,10 @@
           ? '宣言なしで決定しました（補正なし）'
           : '🎯 あなたの宣言ターン — 「手を示す」か、そのまま「決定」';
       } else {
-        // 後攻
-        if (myCommitted) myStatus.textContent = '✓ 決定済み';
-        else if (declarerCommitted) myStatus.textContent = '相手は決定しました — 「決定」を押してじゃんけんへ進みます';
-        else myStatus.textContent = '⏳ 相手のターン — 宣言を待っています…';
+        // 後攻 — no action, just observe
+        myStatus.textContent = declarerCommitted
+          ? '相手は決定しました — じゃんけんフェーズへ移行します'
+          : '⏳ 相手の宣言ターン — 待機中…';
       }
     }
 
@@ -1385,23 +1390,15 @@
       myPicker.classList.remove('open');
     }
 
-    // Commit button
+    // Commit button — only shown to 先攻
     if (canCommit) {
       phaseBtn.style.display = 'inline-block';
       phaseBtn.disabled = false;
-      if (iAmDeclarer) {
-        phaseBtn.textContent = me.declaredHand ? '🆗 決定 → じゃんけんへ' : '🆗 宣言なしで決定';
-      } else {
-        phaseBtn.textContent = '🆗 確認して じゃんけんへ';
-      }
-    } else if (inDeclarePhase && myCommitted) {
+      phaseBtn.textContent = me.declaredHand ? '🆗 決定 → じゃんけんへ' : '🆗 宣言なしで決定';
+    } else if (inDeclarePhase && iAmDeclarer && myCommitted) {
       phaseBtn.style.display = 'inline-block';
       phaseBtn.disabled = true;
-      phaseBtn.textContent = '✓ 決定済み（相手待ち）';
-    } else if (inDeclarePhase && !iAmDeclarer && !declarerCommitted) {
-      phaseBtn.style.display = 'inline-block';
-      phaseBtn.disabled = true;
-      phaseBtn.textContent = '⏳ 先攻の決定待ち';
+      phaseBtn.textContent = '✓ 決定済み';
     } else {
       phaseBtn.style.display = 'none';
     }
@@ -1495,9 +1492,8 @@
     if (room.status !== 'playing') return;
     if ((room.phase || 'declare') !== 'declare') return;
     if (me.phaseReady) return;
-    // Sequential rule: 後攻 must wait until 先攻 has committed
-    const declarer = currentDeclarer(room);
-    if (declarer !== state.playerId && !room[declarer]?.phaseReady) return;
+    // Only 先攻 can commit; 後攻 has no action this phase
+    if (currentDeclarer(room) !== state.playerId) return;
     state.committingPhase = true;
     try {
       await update(ref(db, `rooms/${state.roomCode}/${state.playerId}`), { phaseReady: true });
