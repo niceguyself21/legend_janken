@@ -301,6 +301,84 @@
     filter: grayscale(0.7);
   }
 
+  /* Nickname input */
+  .nickname-row {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px; margin-bottom: 12px;
+  }
+  .nickname-row label {
+    font-size: 0.85em; color: var(--muted);
+  }
+  .nickname-input {
+    font-size: 1.1em; text-align: center;
+    width: 200px; padding: 8px;
+    border-radius: 10px;
+    border: 2px solid var(--accent);
+    background: #2a2a44; color: var(--text);
+  }
+
+  /* Lobby */
+  .lobby-list {
+    display: flex; flex-direction: column; gap: 10px;
+    max-height: 60vh; overflow-y: auto;
+    padding: 4px;
+  }
+  .lobby-room {
+    background: rgba(15, 52, 96, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px; padding: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .lobby-room-info { flex: 1; min-width: 0; }
+  .lobby-room-name {
+    font-weight: bold; font-size: 1.05em; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lobby-room-meta { font-size: 0.8em; color: var(--muted); }
+  .lobby-join-btn {
+    background: var(--accent); color: #1a1a2e;
+    border: none; padding: 8px 16px;
+    border-radius: 10px; font-weight: bold;
+    cursor: pointer; white-space: nowrap;
+  }
+  .lobby-join-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .lobby-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  }
+  .lobby-actions .big-btn {
+    min-width: 140px; padding: 10px 16px; font-size: 0.95em;
+  }
+  .lobby-empty {
+    text-align: center; color: var(--muted);
+    padding: 30px 12px;
+  }
+
+  .room-visibility {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    margin-bottom: 8px;
+  }
+  .room-visibility.public {
+    background: rgba(61, 220, 132, 0.15);
+    color: var(--win);
+    border: 1px solid var(--win);
+  }
+  .room-visibility.private {
+    background: rgba(160, 160, 192, 0.15);
+    color: var(--muted);
+    border: 1px solid var(--muted);
+  }
+
+  .opp-name-label, .me-name-label {
+    font-size: 0.9em;
+    color: var(--accent);
+    font-weight: normal;
+    margin-left: 4px;
+  }
+
   @media (max-width: 520px) {
     .card, .slot-empty, .card-back { width: 88px; height: 130px; }
     .card .hand { font-size: 2em; }
@@ -317,9 +395,22 @@
   <!-- TITLE SCREEN -->
   <div id="titleScreen" class="screen active">
     <h1>⚔ レジェンダリーじゃんけん ⚔<br><span style="font-size:0.7em;">オンライン対戦</span></h1>
+    <div class="nickname-row">
+      <label for="nicknameInput">ニックネーム</label>
+      <input id="nicknameInput" type="text" maxlength="12" placeholder="未入力でランダム" class="nickname-input">
+    </div>
     <div class="btn-group">
       <button id="btnCreate" class="big-btn">🏠 部屋を作る</button>
       <button id="btnJoinOpen" class="big-btn secondary">🚪 部屋に入る</button>
+      <button id="btnLobby" class="big-btn secondary">🌐 公開ロビー</button>
+      <div id="createOptions" style="display:none; flex-direction:column; gap:10px; align-items:center;">
+        <p style="margin:0; color:var(--muted); font-size:0.9em;">部屋の公開設定を選んでください</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+          <button id="btnCreatePublic" class="big-btn">🌐 公開する</button>
+          <button id="btnCreatePrivate" class="big-btn secondary">🔒 非公開</button>
+        </div>
+        <button id="btnCreateCancel" class="big-btn secondary" style="font-size:0.85em; min-width:120px; padding:8px 16px;">キャンセル</button>
+      </div>
       <div id="joinArea" style="display:none; flex-direction:column; gap:8px; align-items:center;">
         <input id="joinCodeInput" class="code-input" maxlength="4" inputmode="numeric" placeholder="0000">
         <div style="display:flex; gap:8px;">
@@ -339,6 +430,7 @@
   <div id="waitingScreen" class="screen">
     <h1>ルームコード</h1>
     <div style="text-align:center;">
+      <div id="roomVisibility" class="room-visibility"></div>
       <div id="roomCodeDisplay" class="room-code-big">----</div>
       <p class="copy-note">このコードを相手に伝えてください</p>
       <div class="btn-group">
@@ -346,6 +438,24 @@
       </div>
       <p style="margin-top:20px;"><span class="spinner"></span> 相手の参加を待っています…</p>
       <button id="btnCancelRoom" class="big-btn secondary" style="margin-top:10px;">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- LOBBY SCREEN -->
+  <div id="lobbyScreen" class="screen">
+    <h1>🌐 公開ロビー</h1>
+    <div style="text-align:center;">
+      <p style="color:var(--muted); font-size:0.9em; margin: 0 0 12px;">参加したい部屋を選んでください</p>
+    </div>
+    <div class="lobby-actions">
+      <button id="btnLobbyRefresh" class="big-btn secondary">🔄 更新</button>
+      <button id="btnLobbyCreate" class="big-btn">🏠 ここで部屋を作る</button>
+      <button id="btnLobbyBack" class="big-btn secondary">← タイトルに戻る</button>
+    </div>
+    <div id="lobbyList" class="lobby-list"></div>
+    <div id="lobbyEmpty" class="lobby-empty" style="display:none;">
+      現在公開されている部屋はありません。<br>
+      部屋を作って待つか、しばらくしてから更新してください。
     </div>
   </div>
 
@@ -358,7 +468,7 @@
 
     <div class="zone" id="opponentZone">
       <div class="info-row">
-        <div class="name">🎮 相手 <span id="oppIdLabel" class="turn-display"></span></div>
+        <div class="name">🎮 相手 <span id="oppNameLabel" class="opp-name-label"></span> <span id="oppIdLabel" class="turn-display"></span></div>
         <div class="stats">
           <span>デッキ: <b id="oppDeck">0</b></span>
           <span>手札: <b id="oppHand">0</b></span>
@@ -393,7 +503,7 @@
 
     <div class="zone" id="meZone">
       <div class="info-row">
-        <div class="name">🧑 あなた <span id="meIdLabel" class="turn-display"></span></div>
+        <div class="name">🧑 あなた <span id="meNameLabel" class="me-name-label"></span> <span id="meIdLabel" class="turn-display"></span></div>
         <div class="stats">
           <span>デッキ: <b id="meDeck">0</b></span>
           <span>手札: <b id="meHand">0</b></span>
@@ -472,6 +582,8 @@
   const HAND_SIZE = 5;
   const DISCONNECT_TIMEOUT_SEC = 30;
   const LS_KEY = 'jankenOnlineSession';
+  const LS_NICK = 'jankenNickname';
+  const LOBBY_MAX_AGE_MS = 30 * 60 * 1000;
 
   // =========================
   // Local state
@@ -500,11 +612,32 @@
   const $ = (id) => document.getElementById(id);
   function showScreen(name) {
     state.screen = name;
-    ['titleScreen', 'waitingScreen', 'gameScreen'].forEach(id => {
+    ['titleScreen', 'waitingScreen', 'gameScreen', 'lobbyScreen'].forEach(id => {
       $(id).classList.toggle('active', id === name + 'Screen');
     });
   }
   function showError(msg) { $('titleError').textContent = msg || ''; }
+
+  // =========================
+  // Nickname
+  // =========================
+  function getNickname() {
+    const input = $('nicknameInput');
+    const raw = (input?.value || '').trim();
+    if (raw.length > 0) {
+      const trimmed = raw.slice(0, 12);
+      localStorage.setItem(LS_NICK, trimmed);
+      return trimmed;
+    }
+    return 'Player' + Math.floor(1000 + Math.random() * 9000);
+  }
+  function loadNickname() {
+    const saved = localStorage.getItem(LS_NICK);
+    if (saved) {
+      const input = $('nicknameInput');
+      if (input) input.value = saved;
+    }
+  }
 
   // =========================
   // Card / deck generation
@@ -629,12 +762,13 @@
     throw new Error('ルームコード生成に失敗しました');
   }
 
-  function buildInitialPlayer(connected) {
+  function buildInitialPlayer(connected, name = null) {
     const deck = generateDeck();
     const hand = [];
     for (let i = 0; i < HAND_SIZE && deck.length > 0; i++) hand.push(deck.pop());
     return {
       connected,
+      name,
       life: INIT_LIFE,
       lifeMax: INIT_LIFE,
       deck,
@@ -647,15 +781,19 @@
     };
   }
 
-  async function createRoom() {
+  async function createRoom({ isPublic = false } = {}) {
     showError('');
     try {
+      const nickname = getNickname();
       const code = await generateUniqueCode();
-      const p1 = buildInitialPlayer(true);
-      const p2 = buildInitialPlayer(false);
+      const p1 = buildInitialPlayer(true, nickname);
+      const p2 = buildInitialPlayer(false, null);
       await set(ref(db, `rooms/${code}`), {
         status: 'waiting',
         createdAt: Date.now(),
+        isPublic: !!isPublic,
+        hostName: nickname,
+        guestName: null,
         turn: 1,
         battleResult: null,
         winner: null,
@@ -692,7 +830,9 @@
       state.playerId = 'player2';
       state.oppId = 'player1';
       state.isHost = false;
-      await update(ref(db, `rooms/${code}/player2`), { connected: true });
+      const nickname = getNickname();
+      await update(ref(db, `rooms/${code}`), { guestName: nickname });
+      await update(ref(db, `rooms/${code}/player2`), { connected: true, name: nickname });
       saveSession();
       setupDisconnect();
       subscribeRoom();
@@ -776,6 +916,14 @@
 
     if (data.status === 'waiting') {
       $('roomCodeDisplay').textContent = state.roomCode;
+      const visEl = $('roomVisibility');
+      if (data.isPublic) {
+        visEl.textContent = '🌐 公開部屋(ロビーに表示中)';
+        visEl.className = 'room-visibility public';
+      } else {
+        visEl.textContent = '🔒 非公開部屋(コードを知っている人のみ)';
+        visEl.className = 'room-visibility private';
+      }
       showScreen('waiting');
       return;
     }
@@ -920,8 +1068,8 @@
   }
 
   async function rebuildForRematch(data) {
-    const p1 = buildInitialPlayer(!!(data.player1 && data.player1.connected));
-    const p2 = buildInitialPlayer(!!(data.player2 && data.player2.connected));
+    const p1 = buildInitialPlayer(!!(data.player1 && data.player1.connected), data.player1?.name || null);
+    const p2 = buildInitialPlayer(!!(data.player2 && data.player2.connected), data.player2?.name || null);
     await update(ref(db, `rooms/${state.roomCode}`), {
       status: 'playing',
       turn: 1,
@@ -973,6 +1121,8 @@
     $('oppDeck').textContent = oppDeck.length;
     $('oppHand').textContent = oppHand.length;
     $('turnDisplay').textContent = `ターン ${data.turn || 1}`;
+    $('meNameLabel').textContent = me.name ? `(${me.name})` : '';
+    $('oppNameLabel').textContent = opp.name ? `(${opp.name})` : '';
 
     // Hand (only render when no battle active and I haven't selected yet)
     const meSelected = !!me.selectedCard;
@@ -1301,6 +1451,90 @@
   }
 
   // =========================
+  // Public lobby
+  // =========================
+  let lobbyUnsubscribe = null;
+
+  function formatElapsed(createdAt) {
+    const elapsed = Math.floor((Date.now() - (createdAt || 0)) / 1000);
+    if (elapsed < 0) return 'たった今';
+    if (elapsed < 60) return `${elapsed}秒前`;
+    if (elapsed < 3600) return `${Math.floor(elapsed / 60)}分前`;
+    return `${Math.floor(elapsed / 3600)}時間前`;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderLobby(roomsObj) {
+    const list = $('lobbyList');
+    const empty = $('lobbyEmpty');
+    list.innerHTML = '';
+    const now = Date.now();
+    const rooms = Object.entries(roomsObj || {})
+      .filter(([code, r]) => {
+        if (!r) return false;
+        if (!r.isPublic) return false;
+        if (r.status !== 'waiting') return false;
+        if (!r.createdAt || (now - r.createdAt) >= LOBBY_MAX_AGE_MS) return false;
+        if (r.player2 && r.player2.connected === true) return false;
+        return /^\d{4}$/.test(code);
+      })
+      .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+
+    if (rooms.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    rooms.forEach(([code, r]) => {
+      const row = document.createElement('div');
+      row.className = 'lobby-room';
+      row.innerHTML = `
+        <div class="lobby-room-info">
+          <div class="lobby-room-name">🧑 ${escapeHtml(r.hostName || '名無し')}</div>
+          <div class="lobby-room-meta">${formatElapsed(r.createdAt)} ・ 募集中</div>
+        </div>
+        <button class="lobby-join-btn" data-code="${code}">参加</button>
+      `;
+      row.querySelector('button').addEventListener('click', () => joinFromLobby(code));
+      list.appendChild(row);
+    });
+  }
+
+  function startLobbyWatch() {
+    if (lobbyUnsubscribe) lobbyUnsubscribe();
+    const roomsRef = ref(db, 'rooms');
+    lobbyUnsubscribe = onValue(roomsRef, (snap) => {
+      renderLobby(snap.val() || {});
+    }, (err) => {
+      console.warn('Lobby watch error:', err);
+      $('lobbyList').innerHTML = '';
+      $('lobbyEmpty').style.display = 'block';
+      $('lobbyEmpty').textContent = 'ロビーの読み込みに失敗しました。Firebase のセキュリティルールを確認してください。';
+    });
+  }
+
+  function stopLobbyWatch() {
+    if (lobbyUnsubscribe) { lobbyUnsubscribe(); lobbyUnsubscribe = null; }
+  }
+
+  async function joinFromLobby(code) {
+    await joinRoom(code);
+    if (state.roomCode) {
+      stopLobbyWatch();
+    } else {
+      // joinRoom failed; titleError は lobby では見えないので alert で通知
+      const err = $('titleError').textContent;
+      if (err) { alert(err); $('titleError').textContent = ''; }
+    }
+  }
+
+  // =========================
   // Reconnect on page load
   // =========================
   async function tryReconnect() {
@@ -1329,16 +1563,53 @@
   // Event wiring
   // =========================
   $('btnCreate').addEventListener('click', () => {
+    $('createOptions').style.display = 'flex';
+    $('joinArea').style.display = 'none';
+    showError('');
+  });
+  $('btnCreatePublic').addEventListener('click', () => {
+    $('createOptions').style.display = 'none';
     $('btnCreate').disabled = true;
-    createRoom().finally(() => { $('btnCreate').disabled = false; });
+    createRoom({ isPublic: true }).finally(() => { $('btnCreate').disabled = false; });
+  });
+  $('btnCreatePrivate').addEventListener('click', () => {
+    $('createOptions').style.display = 'none';
+    $('btnCreate').disabled = true;
+    createRoom({ isPublic: false }).finally(() => { $('btnCreate').disabled = false; });
+  });
+  $('btnCreateCancel').addEventListener('click', () => {
+    $('createOptions').style.display = 'none';
   });
   $('btnJoinOpen').addEventListener('click', () => {
     $('joinArea').style.display = 'flex';
+    $('createOptions').style.display = 'none';
     $('joinCodeInput').focus();
   });
   $('btnJoinCancel').addEventListener('click', () => {
     $('joinArea').style.display = 'none';
     showError('');
+  });
+  $('btnLobby').addEventListener('click', () => {
+    showScreen('lobby');
+    startLobbyWatch();
+  });
+  $('btnLobbyBack').addEventListener('click', () => {
+    stopLobbyWatch();
+    showScreen('title');
+  });
+  $('btnLobbyRefresh').addEventListener('click', () => {
+    stopLobbyWatch();
+    startLobbyWatch();
+  });
+  $('btnLobbyCreate').addEventListener('click', () => {
+    stopLobbyWatch();
+    createRoom({ isPublic: true });
+  });
+
+  $('nicknameInput').addEventListener('change', () => {
+    const v = ($('nicknameInput').value || '').trim().slice(0, 12);
+    $('nicknameInput').value = v;
+    if (v) localStorage.setItem(LS_NICK, v);
   });
   $('btnJoinGo').addEventListener('click', () => {
     const code = $('joinCodeInput').value.trim();
@@ -1413,6 +1684,7 @@
   // Startup
   // =========================
   (async () => {
+    loadNickname();
     showScreen('title');
     const ok = await tryReconnect();
     if (!ok) showScreen('title');
