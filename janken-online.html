@@ -379,6 +379,42 @@
     margin-left: 4px;
   }
 
+  /* Phase indicator */
+  .phase-indicator {
+    text-align: center;
+    font-size: 0.9em;
+    font-weight: bold;
+    color: var(--accent);
+    background: rgba(255, 203, 61, 0.12);
+    border: 1px solid rgba(255, 203, 61, 0.35);
+    border-radius: 10px;
+    padding: 6px 12px;
+    margin: 0;
+  }
+  .phase-indicator.janken {
+    color: #ff9c3d;
+    background: rgba(255, 156, 61, 0.12);
+    border-color: rgba(255, 156, 61, 0.45);
+  }
+  .btn-phase-commit {
+    background: linear-gradient(135deg, var(--win), #6ee2a0);
+    color: #1a1a2e;
+    font-weight: bold;
+    padding: 8px 18px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95em;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.15s;
+  }
+  .btn-phase-commit:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn-phase-commit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: linear-gradient(135deg, #6a7a6a, #5a6a5a);
+  }
+
   @media (max-width: 520px) {
     .card, .slot-empty, .card-back { width: 88px; height: 130px; }
     .card .hand { font-size: 2em; }
@@ -465,6 +501,7 @@
       <h1>⚔ オンライン対戦 ⚔ <span id="turnDisplay" class="turn-display"></span></h1>
       <button id="btnForceQuit" class="quit-btn">🚪 退出</button>
     </div>
+    <div id="phaseIndicator" class="phase-indicator"></div>
 
     <div class="zone" id="opponentZone">
       <div class="info-row">
@@ -522,6 +559,7 @@
           <button data-hand="paper">✋ パー</button>
           <button class="cancel" id="declareCancel">キャンセル</button>
         </div>
+        <button id="btnPhaseReady" class="btn-phase-commit" style="display:none;">🆗 決定</button>
       </div>
       <div class="hand-row" id="meHandRow"></div>
     </div>
@@ -601,6 +639,8 @@
     processingAdvance: false,
     processingStart: false,
     processingRematch: false,
+    processingPhaseAdvance: false,
+    committingPhase: false,
     disconnectTimer: null,
     disconnectStart: null,
     lastStatus: null,
@@ -778,6 +818,7 @@
       ready: false,
       wantRematch: false,
       declaredHand: null,
+      phaseReady: false,
     };
   }
 
@@ -795,6 +836,7 @@
         hostName: nickname,
         guestName: null,
         turn: 1,
+        phase: 'declare',
         battleResult: null,
         winner: null,
         player1: p1,
@@ -951,8 +993,28 @@
   // Host loop — judge + advance + rematch
   // =========================
   async function hostLoop(data) {
-    // Compute battle result when both have selected
+    // Advance from declare phase to janken phase when both phaseReady
     if (data.status === 'playing'
+        && (data.phase || 'declare') === 'declare'
+        && data.player1 && data.player2
+        && data.player1.phaseReady && data.player2.phaseReady
+        && !state.processingPhaseAdvance) {
+      state.processingPhaseAdvance = true;
+      try {
+        await update(ref(db, `rooms/${state.roomCode}`), {
+          'phase': 'janken',
+          'player1/phaseReady': false,
+          'player2/phaseReady': false,
+        });
+      } finally {
+        state.processingPhaseAdvance = false;
+      }
+      return;
+    }
+
+    // Compute battle result when both have selected (only in janken phase)
+    if (data.status === 'playing'
+        && data.phase === 'janken'
         && data.player1 && data.player2
         && data.player1.selectedCard && data.player2.selectedCard
         && !data.battleResult
@@ -1035,6 +1097,7 @@
         selectedCard: null,
         ready: false,
         declaredHand: null,
+        phaseReady: false,
       };
     };
 
@@ -1061,6 +1124,7 @@
       player1: p1,
       player2: p2,
       turn: (data.turn || 1) + 1,
+      phase: 'declare',
       battleResult: null,
       status: gameEnd ? 'finished' : 'playing',
       winner,
@@ -1073,6 +1137,7 @@
     await update(ref(db, `rooms/${state.roomCode}`), {
       status: 'playing',
       turn: 1,
+      phase: 'declare',
       battleResult: null,
       winner: null,
       player1: p1,
@@ -1128,6 +1193,11 @@
     const meSelected = !!me.selectedCard;
     const oppSelected = !!opp.selectedCard;
     const battleActive = !!data.battleResult || data.status === 'finished';
+    const phase = data.phase || 'declare';
+    const isJankenPhase = phase === 'janken';
+
+    // Phase indicator
+    renderPhaseIndicator(phase, data.status);
 
     const host = $('meHandRow');
     host.innerHTML = '';
@@ -1138,17 +1208,17 @@
       el.classList.add('selectable');
       let bluffBlocked = false;
       if (declared && card.hand !== declared && card.hand !== oppHandKey) bluffBlocked = true;
-      if (meSelected || battleActive) el.classList.add('disabled');
+      if (meSelected || battleActive || !isJankenPhase) el.classList.add('disabled');
       if (bluffBlocked) {
         el.classList.add('bluff-blocked', 'disabled');
         el.title = '宣言の制約で出せません';
-      } else {
+      } else if (isJankenPhase && !meSelected && !battleActive) {
         el.addEventListener('click', () => onCardClick(idx, card));
       }
       host.appendChild(el);
     });
 
-    renderDeclareUI(me, opp, battleActive, data.status);
+    renderDeclareUI(me, opp, battleActive, data.status, phase);
 
     // Slots — skip while battleResult is active (handleBattleAnimation manages them)
     if (!data.battleResult) {
@@ -1180,6 +1250,20 @@
     // Verdict / waiting message
     if (battleActive) {
       // verdict is set by animation
+    } else if (!isJankenPhase) {
+      // Declare phase status
+      const meReady = !!me.phaseReady;
+      const oppReady = !!opp.phaseReady;
+      if (meReady && !oppReady) {
+        $('verdict').textContent = '相手の決定を待っています…';
+        $('waitingNote').innerHTML = '<span class="spinner"></span> 待機中';
+      } else if (!meReady && oppReady) {
+        $('verdict').textContent = '相手は決定しました。あなたの番です。';
+        $('waitingNote').textContent = '';
+      } else {
+        $('verdict').textContent = '宣言フェーズ — 次の手を示すか、そのまま「決定」を押してください';
+        $('waitingNote').textContent = '';
+      }
     } else if (meSelected && oppSelected) {
       $('verdict').textContent = '判定中…';
       $('waitingNote').innerHTML = '<span class="spinner"></span>';
@@ -1195,20 +1279,46 @@
     }
   }
 
-  function renderDeclareUI(me, opp, battleActive, status) {
+  function renderPhaseIndicator(phase, status) {
+    const el = $('phaseIndicator');
+    if (status !== 'playing') {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'block';
+    if (phase === 'janken') {
+      el.textContent = '✊ じゃんけんフェーズ — 手札からカードを出してください';
+      el.className = 'phase-indicator janken';
+    } else {
+      el.textContent = '🎯 宣言/スキルフェーズ — 行動を決めて「決定」を押してください';
+      el.className = 'phase-indicator';
+    }
+  }
+
+  function renderDeclareUI(me, opp, battleActive, status, phase) {
     const myStatus = $('meDeclareStatus');
     const myBtn = $('btnDeclare');
     const myPicker = $('declarePicker');
     const oppStatus = $('oppDeclareStatus');
+    const phaseBtn = $('btnPhaseReady');
 
-    const canDeclare = !me.declaredHand && !me.selectedCard && !battleActive && status === 'playing';
+    const inDeclarePhase = phase === 'declare';
+    const myCommitted = !!me.phaseReady;
+    const canDeclare = inDeclarePhase && !myCommitted && !me.declaredHand && !me.selectedCard && !battleActive && status === 'playing';
+    const canCommit = inDeclarePhase && !myCommitted && !battleActive && status === 'playing';
 
     if (me.declaredHand) {
       myStatus.classList.add('declared');
       myStatus.innerHTML = `👁 あなたは <b>${HAND_ICON[me.declaredHand]} ${HAND_LABEL[me.declaredHand]}</b> を示しました（命中 ×1.2 / ブラフ ×0.8）`;
     } else {
       myStatus.classList.remove('declared');
-      myStatus.textContent = canDeclare ? '次の手を示すとダメージ補正がかかる（×1.2 / ×0.8）' : '';
+      if (inDeclarePhase) {
+        myStatus.textContent = myCommitted
+          ? '宣言なしで決定しました（補正なし）'
+          : '次の手を示すとダメージ補正がかかる（×1.2 / ×0.8）';
+      } else {
+        myStatus.textContent = '';
+      }
     }
 
     if (canDeclare) {
@@ -1231,8 +1341,22 @@
       myPicker.classList.remove('open');
     }
 
+    if (canCommit) {
+      phaseBtn.style.display = 'inline-block';
+      phaseBtn.disabled = false;
+      phaseBtn.textContent = me.declaredHand ? '🆗 決定 → じゃんけんへ' : '🆗 宣言なしで決定';
+    } else if (inDeclarePhase && myCommitted) {
+      phaseBtn.style.display = 'inline-block';
+      phaseBtn.disabled = true;
+      phaseBtn.textContent = '✓ 決定済み（相手待ち）';
+    } else {
+      phaseBtn.style.display = 'none';
+    }
+
     if (opp.declaredHand) {
       oppStatus.innerHTML = `👁 相手は <b>${HAND_ICON[opp.declaredHand]} ${HAND_LABEL[opp.declaredHand]}</b> を示している`;
+    } else if (inDeclarePhase) {
+      oppStatus.textContent = opp.phaseReady ? '✓ 相手は決定済み' : '相手は思考中…';
     } else {
       oppStatus.textContent = '';
     }
@@ -1264,6 +1388,7 @@
     if (!room || state.selecting) return;
     const me = room[state.playerId] || {};
     if (me.selectedCard || room.battleResult || room.status !== 'playing') return;
+    if (room.phase !== 'janken') return;
     state.selecting = true;
     const newHand = [...(me.hand || [])];
     newHand.splice(idx, 1);
@@ -1286,7 +1411,8 @@
     const room = state.room;
     if (!room || state.declaring) return;
     const me = room[state.playerId] || {};
-    if (me.declaredHand || me.selectedCard || room.battleResult || room.status !== 'playing') return;
+    if (me.declaredHand || me.selectedCard || me.phaseReady || room.battleResult || room.status !== 'playing') return;
+    if ((room.phase || 'declare') !== 'declare') return;
     state.declaring = true;
     try {
       await update(ref(db, `rooms/${state.roomCode}/${state.playerId}`), { declaredHand: hand });
@@ -1295,6 +1421,27 @@
       console.error(e);
     } finally {
       state.declaring = false;
+    }
+  }
+
+  // =========================
+  // Commit phase (declare → janken)
+  // =========================
+  async function commitPhase() {
+    const room = state.room;
+    if (!room || state.committingPhase) return;
+    const me = room[state.playerId] || {};
+    if (room.status !== 'playing') return;
+    if ((room.phase || 'declare') !== 'declare') return;
+    if (me.phaseReady) return;
+    state.committingPhase = true;
+    try {
+      await update(ref(db, `rooms/${state.roomCode}/${state.playerId}`), { phaseReady: true });
+      $('declarePicker').classList.remove('open');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      state.committingPhase = false;
     }
   }
 
@@ -1639,12 +1786,14 @@
       state.room[state.playerId] || {},
       state.room[state.oppId] || {},
       !!state.room.battleResult || state.room.status === 'finished',
-      state.room.status
+      state.room.status,
+      state.room.phase || 'declare'
     );
   });
   $('declarePicker').querySelectorAll('button[data-hand]').forEach(btn => {
     btn.addEventListener('click', () => declareHand(btn.dataset.hand));
   });
+  $('btnPhaseReady').addEventListener('click', commitPhase);
 
   $('btnForceQuit').addEventListener('click', async () => {
     const msg = '対戦を強制終了してタイトルに戻りますか？\n（ルーム自体を削除するので、相手もタイトルに戻されます）';
