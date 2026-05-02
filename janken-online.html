@@ -259,6 +259,48 @@
   }
   .quit-btn:hover { background: rgba(140, 50, 50, 0.9); }
 
+  .declare-row {
+    display: flex; flex-direction: column; gap: 6px;
+    align-items: center; margin-top: 8px;
+    padding: 8px; border-radius: 10px;
+    background: rgba(255, 203, 61, 0.06);
+    border: 1px dashed rgba(255, 203, 61, 0.25);
+  }
+  .declare-status {
+    font-size: 0.85em; color: var(--muted); text-align: center; min-height: 1em;
+  }
+  .declare-status.declared { color: var(--accent); font-weight: bold; }
+  .declare-btn {
+    background: linear-gradient(135deg, #ffcb3d, #ff9c3d);
+    color: #1a1a2e; border: none;
+    padding: 6px 14px; border-radius: 8px;
+    font-weight: bold; font-size: 0.85em;
+    cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .declare-btn:hover { transform: translateY(-1px); }
+  .declare-picker {
+    display: none; gap: 8px; flex-wrap: wrap; justify-content: center;
+  }
+  .declare-picker.open { display: flex; }
+  .declare-picker button {
+    background: #2a2a44; color: var(--text);
+    border: 2px solid var(--accent);
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 1em; cursor: pointer;
+  }
+  .declare-picker button:hover { background: #3a3a5e; }
+  .declare-picker button.cancel {
+    border-color: #555; color: var(--muted);
+  }
+  .declare-opp {
+    font-size: 0.85em; color: var(--accent);
+    text-align: center; margin-top: 6px; min-height: 1em;
+  }
+  .card.bluff-blocked {
+    opacity: 0.35; cursor: not-allowed;
+    filter: grayscale(0.7);
+  }
+
   @media (max-width: 520px) {
     .card, .slot-empty, .card-back { width: 88px; height: 130px; }
     .card .hand { font-size: 2em; }
@@ -326,6 +368,7 @@
         <div class="life-bar"><div class="life-fill" id="oppLifeFill"></div></div>
         <div class="life-text">ライフ: <span id="oppLife">0</span> / <span id="oppLifeMax">0</span></div>
       </div>
+      <div class="declare-opp" id="oppDeclareStatus"></div>
     </div>
 
     <div id="disconnectNotice" class="disconnect-notice hidden">
@@ -359,6 +402,16 @@
       <div class="life-wrap">
         <div class="life-bar"><div class="life-fill" id="meLifeFill"></div></div>
         <div class="life-text">ライフ: <span id="meLife">0</span> / <span id="meLifeMax">0</span></div>
+      </div>
+      <div class="declare-row">
+        <div class="declare-status" id="meDeclareStatus"></div>
+        <button id="btnDeclare" class="declare-btn" style="display:none;">📣 次の手を示す</button>
+        <div id="declarePicker" class="declare-picker">
+          <button data-hand="rock">✊ グー</button>
+          <button data-hand="scissors">✌️ チョキ</button>
+          <button data-hand="paper">✋ パー</button>
+          <button class="cancel" id="declareCancel">キャンセル</button>
+        </div>
       </div>
       <div class="hand-row" id="meHandRow"></div>
     </div>
@@ -501,31 +554,42 @@
     if (a === 'grass' && b === 'water') return 1;
     return -1;
   }
-  // Returns {p1Damage, p2Damage, kind, multiplier, attacker}
-  function resolveBattle(p1Card, p2Card) {
+  // The hand the declared hand BEATS — so a Rock declaration allows the bluff option of Scissors.
+  function oppositeHand(h) {
+    if (h === 'rock')     return 'scissors';
+    if (h === 'scissors') return 'paper';
+    if (h === 'paper')    return 'rock';
+    return null;
+  }
+  function declareMultiplier(card, declared) {
+    if (!declared) return 1;
+    if (card.hand === declared) return 1.2;
+    if (card.hand === oppositeHand(declared)) return 0.8;
+    return 1;
+  }
+  // Returns {p1Damage, p2Damage, kind, multiplier, attacker, p1DeclareMul, p2DeclareMul}
+  function resolveBattle(p1Card, p2Card, p1Declared, p2Declared) {
     const jk = jankenCompare(p1Card.hand, p2Card.hand);
-    const out = { p1Damage: 0, p2Damage: 0, kind: '', multiplier: 1, attacker: null };
+    const out = {
+      p1Damage: 0, p2Damage: 0, kind: '', multiplier: 1, attacker: null,
+      p1DeclareMul: 1, p2DeclareMul: 1,
+    };
+    const p1DeclMul = declareMultiplier(p1Card, p1Declared);
+    const p2DeclMul = declareMultiplier(p2Card, p2Declared);
     if (jk !== 0) {
-      const winner   = jk > 0 ? { who: 'player1', card: p1Card } : { who: 'player2', card: p2Card };
+      const winner   = jk > 0 ? { who: 'player1', card: p1Card, decl: p1DeclMul } : { who: 'player2', card: p2Card, decl: p2DeclMul };
       const loser    = jk > 0 ? { who: 'player2', card: p2Card } : { who: 'player1', card: p1Card };
       const ec = elemCompare(winner.card.elem, loser.card.elem);
       const mul = ec > 0 ? 2 : (ec < 0 ? 0.5 : 1);
-      const dmg = cardAtk(winner.card) * mul;
+      const dmg = cardAtk(winner.card) * mul * winner.decl;
       out.kind = 'janken';
       out.multiplier = mul;
       out.attacker = winner.who;
-      if (winner.who === 'player1') out.p2Damage = dmg; else out.p1Damage = dmg;
+      if (winner.who === 'player1') { out.p2Damage = dmg; out.p1DeclareMul = p1DeclMul; }
+      else                           { out.p1Damage = dmg; out.p2DeclareMul = p2DeclMul; }
     } else {
-      const ec = elemCompare(p1Card.elem, p2Card.elem);
-      if (ec === 0) {
-        out.kind = 'full_draw';
-      } else if (ec > 0) {
-        out.kind = 'elem'; out.attacker = 'player1';
-        out.p2Damage = cardAtk(p1Card);
-      } else {
-        out.kind = 'elem'; out.attacker = 'player2';
-        out.p1Damage = cardAtk(p2Card);
-      }
+      // Aiko: no damage regardless of element matchup.
+      out.kind = 'draw';
     }
     return out;
   }
@@ -574,6 +638,7 @@
       selectedCard: null,
       ready: false,
       wantRematch: false,
+      declaredHand: null,
     };
   }
 
@@ -741,14 +806,21 @@
         && !state.processingBattle) {
       state.processingBattle = true;
       try {
-        const res = resolveBattle(data.player1.selectedCard, data.player2.selectedCard);
+        const res = resolveBattle(
+          data.player1.selectedCard, data.player2.selectedCard,
+          data.player1.declaredHand || null, data.player2.declaredHand || null
+        );
         await update(ref(db, `rooms/${state.roomCode}`), {
           battleResult: {
             turn: data.turn,
             p1Card: data.player1.selectedCard,
             p2Card: data.player2.selectedCard,
+            p1Declared: data.player1.declaredHand || null,
+            p2Declared: data.player2.declaredHand || null,
             p1Damage: res.p1Damage,
             p2Damage: res.p2Damage,
+            p1DeclareMul: res.p1DeclareMul,
+            p2DeclareMul: res.p2DeclareMul,
             kind: res.kind,
             multiplier: res.multiplier,
             attacker: res.attacker,
@@ -809,6 +881,7 @@
         discard: newDiscard,
         selectedCard: null,
         ready: false,
+        declaredHand: null,
       };
     };
 
@@ -903,13 +976,24 @@
 
     const host = $('meHandRow');
     host.innerHTML = '';
+    const declared = me.declaredHand || null;
+    const oppHandKey = declared ? oppositeHand(declared) : null;
     meHand.forEach((card, idx) => {
       const el = cardEl(card);
       el.classList.add('selectable');
+      let bluffBlocked = false;
+      if (declared && card.hand !== declared && card.hand !== oppHandKey) bluffBlocked = true;
       if (meSelected || battleActive) el.classList.add('disabled');
-      el.addEventListener('click', () => onCardClick(idx, card));
+      if (bluffBlocked) {
+        el.classList.add('bluff-blocked', 'disabled');
+        el.title = '宣言の制約で出せません';
+      } else {
+        el.addEventListener('click', () => onCardClick(idx, card));
+      }
       host.appendChild(el);
     });
+
+    renderDeclareUI(me, opp, battleActive, data.status);
 
     // Slots — skip while battleResult is active (handleBattleAnimation manages them)
     if (!data.battleResult) {
@@ -956,6 +1040,49 @@
     }
   }
 
+  function renderDeclareUI(me, opp, battleActive, status) {
+    const myStatus = $('meDeclareStatus');
+    const myBtn = $('btnDeclare');
+    const myPicker = $('declarePicker');
+    const oppStatus = $('oppDeclareStatus');
+
+    const canDeclare = !me.declaredHand && !me.selectedCard && !battleActive && status === 'playing';
+
+    if (me.declaredHand) {
+      myStatus.classList.add('declared');
+      myStatus.innerHTML = `👁 あなたは <b>${HAND_ICON[me.declaredHand]} ${HAND_LABEL[me.declaredHand]}</b> を示しました（命中 ×1.2 / ブラフ ×0.8）`;
+    } else {
+      myStatus.classList.remove('declared');
+      myStatus.textContent = canDeclare ? '次の手を示すとダメージ補正がかかる（×1.2 / ×0.8）' : '';
+    }
+
+    if (canDeclare) {
+      if (myPicker.classList.contains('open')) {
+        myBtn.style.display = 'none';
+      } else {
+        myBtn.style.display = 'inline-block';
+      }
+      const meHand = me.hand || [];
+      myPicker.querySelectorAll('button[data-hand]').forEach(btn => {
+        const h = btn.dataset.hand;
+        const op = oppositeHand(h);
+        const hasPlayable = meHand.some(c => c.hand === h || c.hand === op);
+        btn.disabled = !hasPlayable;
+        btn.style.opacity = hasPlayable ? '1' : '0.35';
+        btn.title = hasPlayable ? '' : '手札にこの手と反対の相性の手しかない（または何もない）ため宣言できません';
+      });
+    } else {
+      myBtn.style.display = 'none';
+      myPicker.classList.remove('open');
+    }
+
+    if (opp.declaredHand) {
+      oppStatus.innerHTML = `👁 相手は <b>${HAND_ICON[opp.declaredHand]} ${HAND_LABEL[opp.declaredHand]}</b> を示している`;
+    } else {
+      oppStatus.textContent = '';
+    }
+  }
+
   function ensureSlotEmpty(id, text) {
     const el = $(id);
     if (!el) return;
@@ -998,6 +1125,25 @@
   }
 
   // =========================
+  // Declare hand
+  // =========================
+  async function declareHand(hand) {
+    const room = state.room;
+    if (!room || state.declaring) return;
+    const me = room[state.playerId] || {};
+    if (me.declaredHand || me.selectedCard || room.battleResult || room.status !== 'playing') return;
+    state.declaring = true;
+    try {
+      await update(ref(db, `rooms/${state.roomCode}/${state.playerId}`), { declaredHand: hand });
+      $('declarePicker').classList.remove('open');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      state.declaring = false;
+    }
+  }
+
+  // =========================
   // Battle animation (both clients)
   // =========================
   function handleBattleAnimation(data) {
@@ -1019,6 +1165,9 @@
 
     // Build verdict text
     const pIcon = (c) => `${HAND_ICON[c.hand]} ${ELEM_ICON[c.elem]}${RARITY_MAP[c.rarity].label}(ATK${cardAtk(c)})`;
+    const fmtDmg = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1);
+    const declareText = (mul) => mul === 1.2 ? ' ✨宣言ヒット ×1.2'
+                                : mul === 0.8 ? ' 💨ブラフ ×0.8' : '';
     let headline = '', detail = '';
     const meDesc = pIcon(myCard), oppDesc = pIcon(oppCard);
     if (res.kind === 'janken') {
@@ -1029,18 +1178,12 @@
       const mulText = res.multiplier === 2 ? '（こうかばつぐん ×2）'
                     : res.multiplier === 0.5 ? '（いまひとつ ×0.5）'
                     : '（等倍）';
+      const attackerDeclMul = res.attacker === 'player1' ? (res.p1DeclareMul || 1) : (res.p2DeclareMul || 1);
       headline = `${who}のじゃんけん勝利！`;
-      detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>${who}が ${dmg} ダメージ <span class="multi">${mulText}</span>`;
-    } else if (res.kind === 'elem') {
-      const mine = res.attacker === state.playerId;
-      const who = mine ? 'あなた' : '相手';
-      const dmg = mine ? (state.playerId === 'player1' ? res.p2Damage : res.p1Damage)
-                       : (state.playerId === 'player1' ? res.p1Damage : res.p2Damage);
-      headline = `あいこ → 属性勝負！${who}が有利`;
-      detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>${who}が ${dmg} ダメージ（基礎値）`;
+      detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>${who}が ${fmtDmg(dmg)} ダメージ <span class="multi">${mulText}${declareText(attackerDeclMul)}</span>`;
     } else {
-      headline = `完全な引き分け`;
-      detail = `${meDesc} vs ${oppDesc}<br>同じ手・同じ属性 → ダメージなし`;
+      headline = `あいこ → ダメージなし`;
+      detail = `${meDesc} (あなた) vs ${oppDesc} (相手)<br>じゃんけんに勝たないとダメージは通りません`;
     }
 
     setTimeout(() => {
@@ -1209,6 +1352,23 @@
     }
   });
   $('btnCancelRoom').addEventListener('click', () => leaveRoom({ deleteRoom: true }));
+
+  $('btnDeclare').addEventListener('click', () => {
+    $('declarePicker').classList.add('open');
+    $('btnDeclare').style.display = 'none';
+  });
+  $('declareCancel').addEventListener('click', () => {
+    $('declarePicker').classList.remove('open');
+    if (state.room) renderDeclareUI(
+      state.room[state.playerId] || {},
+      state.room[state.oppId] || {},
+      !!state.room.battleResult || state.room.status === 'finished',
+      state.room.status
+    );
+  });
+  $('declarePicker').querySelectorAll('button[data-hand]').forEach(btn => {
+    btn.addEventListener('click', () => declareHand(btn.dataset.hand));
+  });
 
   $('btnForceQuit').addEventListener('click', async () => {
     const msg = '対戦を強制終了してタイトルに戻りますか？\n（ルーム自体を削除するので、相手もタイトルに戻されます）';
