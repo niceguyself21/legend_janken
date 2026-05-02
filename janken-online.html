@@ -747,6 +747,13 @@
     if (h === 'paper')    return 'rock';
     return null;
   }
+  // The hand that BEATS the declared hand — i.e., the hand the declarer CANNOT play.
+  function blockedHand(h) {
+    if (h === 'rock')     return 'paper';
+    if (h === 'paper')    return 'scissors';
+    if (h === 'scissors') return 'rock';
+    return null;
+  }
   // Declaration multiplier — { dealt, received }
   //   宣言と同じ手を出した: dealt ×1.2 (received は等倍)
   //   ブラフ(示した手と反対の相性の手): dealt ×0.8 かつ received ×1.2
@@ -1405,7 +1412,14 @@
 
     // Opponent status
     if (opp.declaredHand) {
-      oppStatus.innerHTML = `👁 相手は <b>${HAND_ICON[opp.declaredHand]} ${HAND_LABEL[opp.declaredHand]}</b> を示している`;
+      const oh = opp.declaredHand;
+      const allowedAlt = oppositeHand(oh);
+      const blocked = blockedHand(oh);
+      oppStatus.innerHTML = `👁 相手は <b>${HAND_ICON[oh]} ${HAND_LABEL[oh]}</b> を示している`
+        + `<br><span style="font-size:0.85em; color:var(--muted);">`
+        + `出せる手: ${HAND_ICON[oh]}${HAND_LABEL[oh]} / ${HAND_ICON[allowedAlt]}${HAND_LABEL[allowedAlt]}（ブラフ）`
+        + ` ｜ 出せない手: <span style="color:#ff8888;">${HAND_ICON[blocked]}${HAND_LABEL[blocked]}</span>`
+        + `</span>`;
     } else if (inDeclarePhase) {
       if (declarer !== state.playerId) {
         // Opponent is the declarer
