@@ -487,6 +487,11 @@
 
   // ---------- Utility ----------
   const rand = (n) => Math.floor(Math.random() * n);
+  function fmtNum(n) {
+    const v = Number(n);
+    if (Number.isInteger(v)) return String(v);
+    return (Math.round(v * 10) / 10).toFixed(1);
+  }
 
   function pickRarity() {
     const total = RARITIES.reduce((s, r) => s + r.weight, 0);
@@ -596,9 +601,9 @@
   }
 
   function renderStats() {
-    $('playerLife').textContent = Math.max(0, state.player.life);
+    $('playerLife').textContent = fmtNum(Math.max(0, state.player.life));
     $('playerLifeMax').textContent = state.player.lifeMax;
-    $('cpuLife').textContent = Math.max(0, state.cpu.life);
+    $('cpuLife').textContent = fmtNum(Math.max(0, state.cpu.life));
     $('cpuLifeMax').textContent = state.cpu.lifeMax;
 
     const pPct = Math.max(0, state.player.life / state.player.lifeMax) * 100;
@@ -632,7 +637,7 @@
     if (!targetEl) return;
     const d = document.createElement('div');
     d.className = 'damage-float';
-    d.textContent = `-${amount}`;
+    d.textContent = `-${fmtNum(amount)}`;
     const rect = targetEl.getBoundingClientRect();
     const parentRect = $('battlefield').getBoundingClientRect();
     d.style.left = (rect.left - parentRect.left + rect.width / 2 - 20) + 'px';
@@ -713,7 +718,7 @@
                    : res.multiplier === 0.5 ? '（いまひとつ ×0.5）'
                    : '（等倍）';
       headline = `${who}のじゃんけん勝利！`;
-      detail = `${pIcon} vs ${cIcon}<br>${who}が ${dmg} ダメージ <span class="multi">${mulText}</span>`;
+      detail = `${pIcon} vs ${cIcon}<br>${who}が ${fmtNum(dmg)} ダメージ <span class="multi">${mulText}</span>`;
     } else {
       headline = `あいこ → ダメージなし`;
       detail = `${pIcon} vs ${cIcon}<br>じゃんけんに勝たないとダメージは通りません`;
@@ -774,16 +779,16 @@
         body = '両者同時にライフが尽きました。';
       } else if (pDead) {
         title = '敗北…';
-        body = `あなたのライフが 0 に。CPUのライフ: ${Math.max(0, state.cpu.life)}`;
+        body = `あなたのライフが 0 に。CPUのライフ: ${fmtNum(Math.max(0, state.cpu.life))}`;
       } else if (cDead) {
         title = '勝利！';
-        body = `CPUを倒しました！あなたのライフ: ${Math.max(0, state.player.life)}`;
+        body = `CPUを倒しました！あなたのライフ: ${fmtNum(Math.max(0, state.player.life))}`;
       } else {
         // Both out of cards
         if (state.player.life > state.cpu.life) {
-          title = '勝利！'; body = `カード枯渇。ライフ差で勝利！ (${state.player.life} vs ${state.cpu.life})`;
+          title = '勝利！'; body = `カード枯渇。ライフ差で勝利！ (${fmtNum(state.player.life)} vs ${fmtNum(state.cpu.life)})`;
         } else if (state.cpu.life > state.player.life) {
-          title = '敗北…'; body = `カード枯渇。ライフ差で敗北。(${state.player.life} vs ${state.cpu.life})`;
+          title = '敗北…'; body = `カード枯渇。ライフ差で敗北。(${fmtNum(state.player.life)} vs ${fmtNum(state.cpu.life)})`;
         } else {
           title = '引き分け'; body = `カードもライフも同じ。完全な引き分けです。`;
         }
