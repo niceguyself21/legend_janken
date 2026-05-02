@@ -536,6 +536,11 @@
     return d;
   }
   function cardAtk(card) { return RARITY_MAP[card.rarity].atk; }
+  function fmtNum(n) {
+    const v = Number(n);
+    if (Number.isInteger(v)) return String(v);
+    return (Math.round(v * 10) / 10).toFixed(1);
+  }
 
   // =========================
   // Battle logic
@@ -953,9 +958,9 @@
     const oppDeck = opp.deck || [];
 
     // Stats
-    $('meLife').textContent = Math.max(0, me.life ?? 0);
+    $('meLife').textContent = fmtNum(Math.max(0, me.life ?? 0));
     $('meLifeMax').textContent = me.lifeMax ?? INIT_LIFE;
-    $('oppLife').textContent = Math.max(0, opp.life ?? 0);
+    $('oppLife').textContent = fmtNum(Math.max(0, opp.life ?? 0));
     $('oppLifeMax').textContent = opp.lifeMax ?? INIT_LIFE;
     const mePct = Math.max(0, (me.life || 0) / (me.lifeMax || INIT_LIFE)) * 100;
     const oppPct = Math.max(0, (opp.life || 0) / (opp.lifeMax || INIT_LIFE)) * 100;
@@ -1165,7 +1170,7 @@
 
     // Build verdict text
     const pIcon = (c) => `${HAND_ICON[c.hand]} ${ELEM_ICON[c.elem]}${RARITY_MAP[c.rarity].label}(ATK${cardAtk(c)})`;
-    const fmtDmg = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1);
+    const fmtDmg = (n) => fmtNum(n);
     const declareText = (mul) => mul === 1.2 ? ' ✨宣言ヒット ×1.2'
                                 : mul === 0.8 ? ' 💨ブラフ ×0.8' : '';
     let headline = '', detail = '';
@@ -1205,7 +1210,7 @@
     const parent = $('battlefield');
     const d = document.createElement('div');
     d.className = 'damage-float';
-    d.textContent = `-${amount}`;
+    d.textContent = `-${fmtNum(amount)}`;
     const rect = targetEl.getBoundingClientRect();
     const parentRect = parent.getBoundingClientRect();
     d.style.left = (rect.left - parentRect.left + rect.width / 2 - 20) + 'px';
