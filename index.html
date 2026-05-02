@@ -560,18 +560,9 @@
       if (winner.who === 'player') result.cDamage = damage;
       else                         result.pDamage = damage;
     } else {
-      const ec = elemCompare(pCard.elem, cCard.elem);
-      if (ec === 0) {
-        result.kind = 'full_draw';
-      } else if (ec > 0) {
-        result.kind = 'elem';
-        result.attacker = 'player';
-        result.cDamage = pCard.rarity.atk;
-      } else {
-        result.kind = 'elem';
-        result.attacker = 'cpu';
-        result.pDamage = cCard.rarity.atk;
-      }
+      // Aiko: no damage regardless of element matchup.
+      result.kind = 'draw';
+      result.elemHint = elemCompare(pCard.elem, cCard.elem);
     }
     return result;
   }
@@ -723,14 +714,9 @@
                    : '（等倍）';
       headline = `${who}のじゃんけん勝利！`;
       detail = `${pIcon} vs ${cIcon}<br>${who}が ${dmg} ダメージ <span class="multi">${mulText}</span>`;
-    } else if (res.kind === 'elem') {
-      const who = res.attacker === 'player' ? 'あなた' : 'CPU';
-      const dmg = res.attacker === 'player' ? res.cDamage : res.pDamage;
-      headline = `あいこ → 属性勝負！${who}が有利`;
-      detail = `${pIcon} vs ${cIcon}<br>${who}が ${dmg} ダメージ（基礎値）`;
     } else {
-      headline = `完全な引き分け`;
-      detail = `${pIcon} vs ${cIcon}<br>同じ手・同じ属性 → ダメージなし`;
+      headline = `あいこ → ダメージなし`;
+      detail = `${pIcon} vs ${cIcon}<br>じゃんけんに勝たないとダメージは通りません`;
     }
 
     setVerdict(`<div class="headline">${headline}</div>${detail}`);
